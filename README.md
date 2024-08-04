@@ -3,7 +3,7 @@ Implementation of the original [Vision Transformer](https://arxiv.org/pdf/2010.1
 
 ## Sample Project Timeline (Not finalized)
 
-### Week 1
+### Week 1 (intros and setup)
 
 - Project overview, intros, icebreakers
 - Intro to Transformers
@@ -12,7 +12,7 @@ Implementation of the original [Vision Transformer](https://arxiv.org/pdf/2010.1
 - Gauge interest within transformers
 - Split into individual groups (do a game for teambuilding or something)
 
-### Week 2
+### Week 2 ()
 - 
 
 
