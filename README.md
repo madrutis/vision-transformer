@@ -44,8 +44,14 @@ Implementation of the original [Vision Transformer](https://arxiv.org/pdf/2010.1
 
 ### Week 6 (Wrapping Up implementation + training)
 - Continue training/finetuning
-- Look into deployment to AWS
-- Implement a frontend? possibly
+- May split different groups up depending on certain datasets or hyperparameters depending on compute power
+
+
+### Week 7 (Training/deployment/frontend)
+
+
+### Week 8 (Presentation preparation / last minute improvements)
+
 
 
 ## Training Goals (TBD)
