@@ -9,6 +9,7 @@ class Embedding(nn.Module):
     '''
     Constructs embedding for Vision Transformer
     Assumes photos are divisible by patch size
+
     '''
     def __init__(self, batch_size=32, patch_size=16, embed_dim=768, channels=3):
         super(self).__init__()
@@ -21,6 +22,8 @@ class Embedding(nn.Module):
         self.projection = nn.Linear(self.flat_patch_dim, embed_dim)
 
     def forward(self, x):
+        # TODO ADD CLASS TOKEN TO EMBEDDING
+
         # input is formatted in shape (batch_size, height, width, channels)
         # split image into patches and flatten (batch_size, (height / patch_size) * (width / patch_size), patch_size**2 * channels)
         patches = einops.rearrange(x, 'b (h p1) (w p2) c -> b (h w) (p1 p2 c)', p1=self.patch_size, p2=self.patch_size)
@@ -65,6 +68,29 @@ class PositionalEncoding(nn.Module):
         return self.dropout(x)
 
 
+class Attention(nn.Module):
+    def __init__(self, batch_size):
+        # do stuff here
+        self.batch_size = batch_size
+    def forward(self, x):
+        ## continue implementation
+        return x
+    
+class Multihead_Attention(nn.Module):
+    def __init__(self, batch_size):
+        # do stuff here
+        self.batch_size = batch_size
+    def forward(self, x):
+        ## continue implementation
+        return x
+
+class ViT(nn.Module):
+    def __init__(self, batch_size):
+        # do stuff here
+        self.batch_size = batch_size
+    def forward(self, x):
+        ## continue implementation
+        return x
 
 
              
