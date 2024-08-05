@@ -47,7 +47,7 @@ class PositionalEncoding(nn.Module):
 
         # positional encodings need to be same shape as embedded input for addition 
         # Shape (b, h*w / p_s**2, embed_dim) = (b, num_patches, embed_dim)
-        # code here taken from Umar Jamil on youtube
+        # log/divisor implementation taken from Umar Jamil on youtube
         self.positional_encoding = torch.zeros(self.num_patches, embed_dim)
         position = torch.arange(0, self.num_patches, dtype=torch.float).unsqueeze(1)
         divisor = torch.exp(torch.arange(0, embed_dim, 2).float() * -log(10000.0 / embed_dim))
