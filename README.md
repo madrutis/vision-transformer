@@ -1,6 +1,6 @@
 # Vision Transformer from Scratch
 Implementation of the original [Vision Transformer](https://arxiv.org/pdf/2010.11929) paper for the [Michigan Data Science Team](https://mdst.club/)
-
+![image](https://github.com/user-attachments/assets/cbfed802-7f9a-440c-8e4b-4c1b8ce7a05d)
 **General goals of this project**
 - Gain exposure to complex ML concepts
 - Understand how transformers work and how they are implemented
