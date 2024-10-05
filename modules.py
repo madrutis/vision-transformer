@@ -5,84 +5,114 @@ import torch.optim as optim
 import einops
 from math import sqrt, log
 
-class Embedding(nn.Module):
-    '''
-    Constructs embedding for Vision Transformer
-    Assumes photos are divisible by patch size
-
-    '''
-    def __init__(self, batch_size=32, patch_size=16, embed_dim=768, channels=3):
-        super(self).__init__()
-        self.batch_size = batch_size
+class InputEmbedding(nn.Module):
+    def __init__(self, patch_size, n_channels, latent_size, dropout, img_height, img_width, device):
+        super(InputEmbedding, self).__init__()
+        self.latent_size = latent_size
         self.patch_size = patch_size
-        self.embed_dim = embed_dim
-        self.flat_patch_dim = patch_size * patch_size * channels
+        self.n_channels = n_channels
+        self.input_size = patch_size * patch_size * n_channels
+        self.dropout = nn.Dropout(dropout)
+        self.num_patches = (img_height // patch_size) * (img_width // patch_size)
+        self.device = device
+        self.linearProjection = nn.Linear(self.input_size, self.latent_size)
 
-        # define projection
-        self.projection = nn.Linear(self.flat_patch_dim, embed_dim)
+        # Random initialization of [CLS] token that is prepended to linear projection vector
+        self.class_token = nn.Parameter(torch.randn(1, 1, self.latent_size))
 
-    def forward(self, x):
-        # TODO ADD CLASS TOKEN TO EMBEDDING
+        # Positional embedding
+        self.pos_embedding = nn.Parameter(torch.randn(1, self.num_patches + 1, self.latent_size)).to(self.device)
+    
+    def forward(self, input_data):
+        input = input_data.to(self.device)
+        # input_data (batch_size, num_channels, height, width) -> (batch_size, num_patches, input_size)
+        patches = einops.rearrange(
+            input, 
+            'b c (h h1) (w w1) -> b (h w) (h1 w1 c)',
+            h1=self.patch_size, w1=self.patch_size
+        )
+        # Linear projection
+        projection = self.linearProjection(patches)
+        # Prepend [CLS] token
+        cls_token = einops.repeat(self.class_token, '1 1 d -> b 1 d', b=input.shape[0])
+        # (bsz, num_patches + 1, latent_size)
+        projection = torch.cat((cls_token, projection), dim=1)
+        # Add positional embedding
+        pos_embed = einops.repeat(self.pos_embedding, '1 m d -> b m d', b=input.shape[0])
 
-        # input is formatted in shape (batch_size, height, width, channels)
-        # split image into patches and flatten (batch_size, (height / patch_size) * (width / patch_size), patch_size**2 * channels)
-        patches = einops.rearrange(x, 'b (h p1) (w p2) c -> b (h w) (p1 p2 c)', p1=self.patch_size, p2=self.patch_size)
+        projection += pos_embed
+        projection = self.dropout(projection)
+        return projection
 
-        # include sqrt(embed_dim) as listed in the paper
-        return self.projection(patches) * sqrt(self.embed_dim)
 
-class PositionalEncoding(nn.Module):
-    '''
-    Constructs Positional Encoding for Vision Transformer
-    Uses log in denominator of equation listed in paper (makes no difference to model training)
-    '''
-    def __init__(self, batch_size, patch_size, embed_dim, channels, width, height, dropout):
-        super().__init__(self)
-        self.batch_size = batch_size
-        self.patch_size = patch_size
-        self.embed_dim = embed_dim
-        self.num_patches = (width / patch_size) * (height / patch_size)
-        self.channels = channels
+
+class ScaledDotProduct(nn.Module):
+    def __init__(self, latent_size, dropout, mask):
+        super(ScaledDotProduct, self).__init__()
+        pass
+
+    def forward(self, queries, keys, values):
+        pass
+
+    
+class MultiheadAttention(nn.Module):
+    def __init__(self, latent_size, num_heads, dropout, mask=None):
+        super(MultiheadAttention, self).__init__()
+        self.latent_size = latent_size
+        self.num_heads = num_heads
         self.dropout = nn.Dropout(dropout)
 
-        # positional encodings need to be same shape as embedded input for addition 
-        # Shape (b, h*w / p_s**2, embed_dim) = (b, num_patches, embed_dim)
-        # log/divisor implementation taken from Umar Jamil on youtube
-        self.positional_encoding = torch.zeros(self.num_patches, embed_dim)
-        position = torch.arange(0, self.num_patches, dtype=torch.float).unsqueeze(1)
-        divisor = torch.exp(torch.arange(0, embed_dim, 2).float() * -log(10000.0 / embed_dim))
+        # latent_size must be divisible by num_heads
+        self.d_k = latent_size // num_heads
+        self.w_q = nn.Linear(latent_size, latent_size, bias=False)
+        self.w_k = nn.Linear(latent_size, latent_size, bias=False)
+        self.w_v = nn.Linear(latent_size, latent_size, bias=False)
+        self.w_o = nn.Linear(latent_size, latent_size, bias=False)
 
-        self.positional_encoding[:, 0::2] = torch.sin(position * divisor)
-        self.positional_encoding[:, 1::2] = torch.cos(position * divisor)
+    @staticmethod
+    def attention(self, query, key, value, dropout=None):
+        # (batch, num_heads, num_patches, d_k) @ (b num_heads d_k num_patches) = (batch, num_heads, num_patches, num_patches)
+        attention_scores = (query @ einops.rearrange(key, 'b num_heads num_p d_k -> b num_heads d_k num_p')) / sqrt(self.d_k)
+        attention_scores = attention_scores.softmax(dim=-1)
+        if dropout is not None:
+            attention_scores = dropout(attention_scores)
         
-        # repeat the positional encoding for every image/set of patches in the batch
-        self.positional_encoding = einops.repeat(self.positional_encoding, 'num_patches embed_dim -> b num_patches embed_dim',b=batch_size)
+        return (attention_scores @ value), attention_scores
+                    
+    def forward(self, queries, keys, values):
+        # input is (batch, num_patches, latent_dim)
+        query = self.w_q(queries)
+        key = self.w_k(keys)
+        value = self.w_v(values)
+
+        # (batch, num_patches, latent_dim) --> (batch, latent_dim, num_heads, d_k) --> (batch, num_heads, num_patches, d_k)
+        query = einops.rearrange(query, 'b num_p (d_k num_heads) -> b num_heads num_p d_k', num_heads=self.num_heads)
+        key = einops.rearrange(key, 'b num_p (d_k num_heads) -> b num_heads num_p d_k', num_heads=self.num_heads)
+        value = einops.rearrange(value, 'b num_p (d_k num_heads) -> b num_heads num_p d_k', num_heads=self.num_heads)
+
+        # (batch, num_heads, num_patches, d_k)
+        out, attention_scores = self.attention(query, key, value, self.dropout)
         
-        # save pe to the model parameters, even though it isn't learned
-        self.register_buffer('positional_encoding', self.positional_encoding)
+        # combine all of the heads together
+        out = einops.rearrange(out, 'batch num_heads num_patches d_k -> batch num_patches (num_heads d_k)')
 
+        return self.w_o(out)
     
-    def forward(self, x):
-        # x is the batch of input embeddings in shape (b, num_patches, embed_dim)
-        x = (x + self.positional_encoding).requires_grad_(False)
-        return self.dropout(x)
+attention = MultiheadAttention(768, 4, .2)
+
+test_vector = torch.randn(16, 768, 768)
+
+print(attention(test_vector, test_vector, test_vector).shape)
+
+class Encoder(nn.Module):
+    def __init__(self, latent_size, num_heads, dropout, mask=None):
+        super(Encoder, self).__init__()
+        pass
+                    
+    def forward(self, queries, keys, values):
+       pass
 
 
-class Attention(nn.Module):
-    def __init__(self, batch_size):
-        # do stuff here
-        self.batch_size = batch_size
-    def forward(self, x):
-        ## continue implementation
-        return x
-    
-class Multihead_Attention(nn.Module):
-    def __init__(self, batch_size):
-        # do stuff here
-        self.batch_size = batch_size
-    def forward(self, x):
-        ## continue implementation
-        return x
 
 class ViT(nn.Module):
     def __init__(self, batch_size):
