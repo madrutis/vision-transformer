@@ -43,17 +43,6 @@ class InputEmbedding(nn.Module):
         projection += pos_embed
         projection = self.dropout(projection)
         return projection
-
-
-
-class ScaledDotProduct(nn.Module):
-    def __init__(self, latent_size, dropout, mask):
-        super(ScaledDotProduct, self).__init__()
-        pass
-
-    def forward(self, queries, keys, values):
-        pass
-
     
 class MultiheadAttention(nn.Module):
     def __init__(self, latent_size, num_heads, dropout, mask=None):
@@ -104,23 +93,62 @@ test_vector = torch.randn(16, 768, 768)
 
 print(attention(test_vector, test_vector, test_vector).shape)
 
-class Encoder(nn.Module):
-    def __init__(self, latent_size, num_heads, dropout, mask=None):
-        super(Encoder, self).__init__()
-        pass
-                    
-    def forward(self, queries, keys, values):
-       pass
+class EncoderBlock(nn.Module):
+    def __init__(self, latent_size, dropout, num_heads):
+        super(EncoderBlock, self).__init__()
 
+        self.norm = nn.LayerNorm(latent_size)
+        
+        # Multi-Head Attention layer
+        self.multihead = MultiheadAttention(latent_size=latent_size, num_heads=num_heads, dropout=dropout)  
 
+        # MLP_head layer
+        self.enc_MLP = nn.Sequential(
+            nn.Linear(latent_size, latent_size*4),
+            nn.GELU(),
+            nn.Dropout(dropout),
+            nn.Linear(latent_size*4, latent_size),
+            nn.Dropout(dropout)
+        )
+        
+    def forward(self, embedded_patches):
+        ep_norm = self.norm(embedded_patches)
+        residual_conn = self.multihead(ep_norm, ep_norm, ep_norm)
+        first_out = embedded_patches + residual_conn 
+        
+        secondNorm = self.norm(first_out)
+        residual_conn = self.enc_MLP(secondNorm)
+        return residual_conn + first_out
+    
 
-class ViT(nn.Module):
-    def __init__(self, batch_size):
-        # do stuff here
-        self.batch_size = batch_size
-    def forward(self, x):
-        ## continue implementation
-        return x
+class Vit(nn.Module):
+    def __init__(self, num_encoders, latent_size, num_classes, dropout, patch_size, n_channels, num_heads, img_height, img_width, device, batch_size):
+        super(Vit, self).__init__()
+        self.embedding = InputEmbedding(patch_size, n_channels, latent_size, dropout, img_height, img_width, device, batch_size)
+
+        # Create a stack of encoder layers
+        self.encStack = nn.ModuleList([EncoderBlock(latent_size=latent_size, dropout=dropout, num_heads=num_heads) for _ in range(num_encoders)])
+
+        # MLP_head at the classification stage
+        self.MLP_head = nn.Sequential(
+            nn.LayerNorm(latent_size),
+            nn.Linear(latent_size, latent_size),
+            nn.Tanh(),
+            nn.Linear(latent_size, num_classes)
+        )
+    
+    def forward(self, input):
+        emb_patch = self.embedding(input)
+        print('in forward pass')
+        
+        for enc_layer in self.encStack:
+            print('enc layer')
+            emb_patch = enc_layer(emb_patch)
+        print('done')
+        
+        cls_token_embedding = emb_patch[:, 0]
+        print('done2')
+        return self.MLP_head(cls_token_embedding)
 
 
              
